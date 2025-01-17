@@ -1,0 +1,29 @@
+---
+# handlers file for pgsql_main_launch
+- name: Nginx Reloader
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+    enabled: yes
+  listen: "Nginx Reloader"
+
+- name: Psql Reloader
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
+    enabled: yes
+  listen: "Psql Reloader"
+
+- name: Media (my-wiki) backup timer Reloader
+  ansible.builtin.service:
+    name: media_backup.timer
+    state: restarted
+    enabled: yes
+  listen: "Media Backup Reloader"
+
+- name: Postgresql (bd) backup timer Reloader
+  ansible.builtin.service:
+    name: pgsql_backup.timer
+    state: restarted
+    enabled: yes
+  listen: "Psql Backup Reloader"

@@ -1,0 +1,77 @@
+# tasks file for nginx_proxy
+
+- name: Установка nginx
+  apt:
+    name: "nginx"
+    state: present
+
+- name: Установка zabbix-agent
+  apt:
+    name: "zabbix-agent"
+    state: present
+
+
+- name: Установка zabbix-age
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^Server='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Установка zabbix-age
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^ServerActive='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Установка zabbix-age
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^Hostname='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Server
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "Server={{hostvars['backup_vm']['ansible_host']}}"
+    state: present
+  tags:
+    - update_backup_server
+
+- name: ServerActive
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "ServerActive={{hostvars['backup_vm']['ansible_host']}}"
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Hostname
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "Hostname={{inventory_hostname}}"
+    state: present
+  changed_when: true
+  notify:
+    - "Zabbix agent Reloader"
+  tags:
+    - update_backup_server
+
+- name: Подмена конфига для проксирования на наши сервера
+  ansible.builtin.template:
+    src: index.j2
+    dest: /etc/nginx/sites-available/default
+  changed_when: true
+  notify: "Nginx Reloader"
+  tags:
+    - promote_replica
+
+

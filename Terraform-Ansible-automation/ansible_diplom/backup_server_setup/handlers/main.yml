@@ -1,0 +1,48 @@
+---
+# handlers file for backup_server_setup
+- name: Mysql Reloader
+  ansible.builtin.service:
+    name: mysql
+    state: restarted
+    enabled: yes
+  listen: "Mysql Reloader"
+
+- name: Zabbix server Reloader
+  ansible.builtin.service:
+    name: zabbix-server
+    state: restarted
+    enabled: yes
+  listen: "Zabbix server Reloader"
+
+- name: Zabbix agent Reloader
+  ansible.builtin.service:
+    name: zabbix-agent
+    state: restarted
+    enabled: yes
+  listen: "Zabbix agent Reloader"
+
+- name: Php fpm Reloader
+  ansible.builtin.service:
+    name: php8.1-fpm
+    state: restarted
+    enabled: yes
+  listen: "Php-fpm Reloader"
+
+- name: Nginx Reloader
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+    enabled: yes
+  listen: "Nginx Reloader"
+
+- name: NFS server Reloader
+  ansible.builtin.service:
+    name: nfs-kernel-server
+    state: restarted
+    enabled: yes
+  listen: "NFS Reloader"
+
+- name: NFS export
+  ansible.builtin.shell:
+    "exportfs -a"
+  listen: "NFS Export"

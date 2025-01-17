@@ -1,0 +1,67 @@
+---
+# tasks file for pgsql_main_launch
+- name: Stop nginx before editing
+  service:
+    name: nginx
+    state: stopped
+
+- name: Start postgresql before editing
+  service:
+    name: postgresql
+    state: restarted
+  tags:
+    - restore_bd
+
+- name: Add postgres to sudo group for allowing to write backups
+  user:
+    name: postgres
+    groups:
+      - postgres
+      - sudo
+      - www-data
+    append: yes
+  tags:
+    - restore_bd
+    - promote_replica
+
+- name: Делаем backup из all.sql файла nfs хранилища
+  shell:
+    sudo -u postgres -i psql -f /mnt/nfs/backups/fresh.bak.d/all.sql
+  become: false
+  tags:
+    - restore_bd
+
+- name: Меняем конфиг postgresql /etc/postgresql/14/main/postgresql.conf
+  copy:
+    src: postgresql.conf
+    dest: /etc/postgresql/14/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: '0644'
+
+- name: Меняем конфиг pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba_conf.j2
+    dest: "/etc/postgresql/14/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  changed_when: true
+  notify:
+    - "Psql Reloader"
+
+- name: Добавляем конфиг для media-wiki LocalSettings.php
+  ansible.builtin.template:
+    src: LocalSettings_php.j2
+    dest: /var/www/html/my-wiki/LocalSettings.php
+    owner: www-data
+    group: www-data
+    mode: '0640'
+  changed_when: true
+  notify:
+    - "Nginx Reloader"
+    - "Media Backup Reloader"
+    - "Psql Backup Reloader"
+  tags:
+    - restore_media
+

@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup of media wiki files (runs daily)
+After=network.target
+Requires=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/media_backup.sh /mnt/nfs/backups ./my-wiki 
+User=postgres
+Group=sudo
+WorkingDirectory=/var/www/html
+
+[Install]
+WantedBy=multi-user.target

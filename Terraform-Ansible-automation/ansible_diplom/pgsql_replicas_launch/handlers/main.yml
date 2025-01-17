@@ -1,0 +1,15 @@
+---
+# handlers file for pgsql_replicas_launch
+- name: Nginx Reloader
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+    enabled: yes
+  listen: "Nginx Reloader"
+
+- name: Psql Reloader
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
+    enabled: yes
+  listen: "Psql Reloader"

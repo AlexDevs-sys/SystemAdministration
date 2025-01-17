@@ -1,0 +1,225 @@
+---
+# tasks file for app_basic_setup
+- name: Установка zabbix.deb пакетов
+  ansible.builtin.get_url:
+    url:
+      "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu22.04_all.deb"
+    dest: "/tmp/zabbix-release_latest_7.0+ubuntu22.04_all.deb"
+  become: yes
+  become_user: root
+
+- name: dpkg
+  apt:
+    deb: '/tmp/zabbix-release_latest_7.0+ubuntu22.04_all.deb'
+    state: present
+  become: yes
+  become_user: root
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Upgrade all packages to the latest version
+  apt:
+    upgrade: dist
+
+- name: Установка пакетов для mediawiki в том числе Nginx и Postgresql
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ media_wiki_packages }}"
+
+- name: Установка клиентских zabbix пакетов
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ zabbix_packages }}"
+
+- name: Установка клиентских nfs пакетов
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ nfs_packages }}"
+
+
+- name: Установка zabbix-aget rm
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^Server='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Установка zabbix-aget rm
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^ServerActive='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Установка zabbix-aget rm
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    regexp: '^Hostname='
+    line: ""
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Server
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "Server={{hostvars['backup_vm']['ansible_host']}}"
+    state: present
+  tags:
+    - update_backup_server
+
+- name: ServerActive
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "ServerActive={{hostvars['backup_vm']['ansible_host']}}"
+    state: present
+  tags:
+    - update_backup_server
+
+- name: Hostname
+  ansible.builtin.lineinfile:
+    path: /etc/zabbix/zabbix_agentd.conf
+    line: "Hostname=WatcherServer"
+    state: present
+  changed_when: true
+  notify:
+    - "Zabbix agent Reloader"
+  tags:
+    - update_backup_server
+
+- name: Создаем директорию для монтирования nfs-шары
+  ansible.builtin.file:
+    path: /mnt/nfs/backups
+    state: directory
+    owner: "postgres"
+    group: "sudo"
+    mode: '0775'
+
+- name: Mount the NFS share
+  ansible.builtin.mount:
+    path: /mnt/nfs/backups  # Путь к локальной точке монтирования
+    src: "{{  hostvars['backup_vm']['ansible_host'] }}:/srv/shares/nfs/backups"  # Указываем путь к nfs хранилищу 
+    fstype: nfs
+    state: mounted
+
+- name: Устанавливаем ru_RU locale (используется pgsql bd)
+  community.general.locale_gen:
+    name: ru_RU.UTF-8
+    state: present
+
+- name: Обновляем locale настройки
+  ansible.builtin.shell:
+    update-locale
+  ignore_errors: yes
+
+- name: Меняем nginx conf
+  copy:
+    src: "nginx_conf"
+    dest: "/etc/nginx/sites-available/default"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Создаем директорию для media-wiki
+  ansible.builtin.file:
+    path: /var/www/html
+    state: directory
+    owner: "root"
+    group: "root"
+    mode: '0755'
+
+- name: remove old arch files
+  ansible.builtin.file:
+    path: /home/s17619864/my-wiki
+    state: absent
+
+- name: Extract the .tar.gz file
+  ansible.builtin.unarchive:
+    src: /mnt/nfs/backups/fresh.bak.d/my-wiki.tar.gz  # Path to the .tar.gz file
+    dest: /home/s17619864   # Destination directory to extract the archive to
+    remote_src: yes
+  become_user: s17619864
+  tags:
+    - restore_media
+
+- name: mv media-wiki
+  ansible.builtin.shell:
+    mv /home/s17619864/my-wiki /var/www/html
+  ignore_errors: yes
+  tags:
+    - restore_media
+
+- name: Задаем правильные права для my-wiki директории
+  file:
+    path: /var/www/html/my-wiki
+    owner: www-data
+    group: www-data
+    recurse: yes
+    state: directory
+  tags:
+    - restore_media
+
+- name: Copy pgsql_backup.sh to /bin
+  ansible.builtin.copy:
+    src: pgsql_backup.sh
+    dest: /usr/bin/pgsql_backup.sh
+    owner: root
+    group: sudo
+    mode: '0751'
+
+- name: Copy pgsql_backup.service to /etc/systemd/system
+  ansible.builtin.copy:
+    src: pgsql_backup.service
+    dest: /etc/systemd/system/pgsql_backup.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy pgsql_backup.timer to /etc/systemd/system
+  ansible.builtin.copy:
+    src: pgsql_backup.timer
+    dest: /etc/systemd/system/pgsql_backup.timer
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy media_backup.sh to /bin
+  ansible.builtin.copy:
+    src: media_backup.sh
+    dest: /usr/bin/media_backup.sh
+    owner: root
+    group: sudo
+    mode: '0751'
+
+- name: Copy media_backup.service to /etc/systemd/system
+  ansible.builtin.copy:
+    src: media_backup.service
+    dest: /etc/systemd/system/media_backup.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy media_backup.timer to /etc/systemd/system
+  ansible.builtin.copy:
+    src: media_backup.timer
+    dest: /etc/systemd/system/media_backup.timer
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload systemd to recognize new service
+  ansible.builtin.systemd:
+    daemon_reload: yes
+

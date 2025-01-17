@@ -1,0 +1,8 @@
+---
+# handlers file for app_basic_setup
+- name: Zabbix agent Reloader
+  ansible.builtin.service:
+    name: zabbix-agent
+    state: restarted
+    enabled: yes
+  listen: "Zabbix agent Reloader"

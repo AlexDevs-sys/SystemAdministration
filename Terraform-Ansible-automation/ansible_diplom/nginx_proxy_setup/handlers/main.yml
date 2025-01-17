@@ -1,0 +1,16 @@
+---
+# handlers file for nginx_custom
+- name: Nginx Reloader
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+    enabled: yes
+  listen: "Nginx Reloader"
+  tags: Nginx_Reload
+
+- name: Zabbix agent Reloader
+  ansible.builtin.service:
+    name: zabbix-agent
+    state: restarted
+    enabled: yes
+  listen: "Zabbix agent Reloader"

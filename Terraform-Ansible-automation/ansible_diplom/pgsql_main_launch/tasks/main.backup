@@ -1,0 +1,78 @@
+---
+# tasks file for pgsql_main_launch
+- name: Stop nginx before editing
+  service:
+    name: nginx
+    state: stopped
+
+- name: Start postgresql before editing
+  service:
+    name: postgresql
+    state: restarted
+
+- name: Директория local для backup
+  file:
+    path: /etc/postgresql/14/main/backups
+    owner: postgres
+    group: postgres
+    mode: '0777'
+    recurse: yes
+    state: directory
+
+- name: Копируем backup в папку
+  shell:
+    sudo -u s17619864 -i cp /mnt/nfs/backups/fresh.bak.d/all.sql /etc/postgresql/14/main/backups
+  become: no
+
+- name: Права для backup
+  file:
+    path: /etc/postgresql/14/main/backups/all.sql
+    owner: postgres
+    group: postgres
+    mode: '0600'
+    state: file
+
+- name: Директория local для backup
+  file:
+    path: /etc/postgresql/14/main/backups
+    owner: postgres
+    group: postgres
+    mode: '0744'
+    recurse: yes
+    state: directory
+
+- name: Делаем backup из all.sql файла nfs хранилища
+  shell:
+    sudo -u postgres -i psql -f /etc/postgresql/14/main/backups/all.sql
+  become: no
+
+- name: Меняем конфиг postgresql /etc/postgresql/14/main/postgresql.conf
+  copy:
+    src: postgresql.conf
+    dest: /etc/postgresql/14/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: '0644'
+
+- name: Меняем конфиг pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba_conf.j2
+    dest: "/etc/postgresql/14/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify:
+    - "Psql Reloader"
+
+- name: Добавляем конфиг для media-wiki LocalSettings.php
+  ansible.builtin.template:
+    src: LocalSettings_php.j2
+    dest: /var/www/html/my-wiki/LocalSettings.php
+    owner: www-data
+    group: www-data
+    mode: '0600'
+  notify:
+    - "Nginx Reloader"
+    - "Media Backup Reloader"
+    - "Psql Backup Reloader"
+

@@ -1,0 +1,9 @@
+[Unit]
+Description=Whole pgsql backup timer
+
+[Timer]
+OnCalendar=*:00:00
+Unit=pgsql_backup.service
+
+[Install]
+WantedBy=timers.target

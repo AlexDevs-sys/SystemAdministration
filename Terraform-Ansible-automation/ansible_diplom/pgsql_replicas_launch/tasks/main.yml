@@ -1,0 +1,81 @@
+---
+# tasks file for pgsql_main_launch
+- name: Stop nginx before editing
+  ansible.builtin.service:
+    name: nginx
+    state: stopped
+  tags:
+    - promote_replica
+    - restore_bd
+
+- name: Stop backup scripts on replicas (media)
+  ansible.builtin.service:
+    name: media_backup.timer
+    state: stopped
+    enabled: no
+  tags:
+    - promote_replica
+
+- name: Stop backup scripts on replicas (sql)
+  ansible.builtin.service:
+    name: pgsql_backup.timer
+    state: stopped
+    enabled: no
+  tags:
+    - promote_replica
+
+
+- name: Stop postgresql before editing
+  ansible.builtin.service:
+    name: postgresql
+    state: stopped
+  tags:
+    - promote_replica
+    - restore_bd
+
+- name: Меняем конфиг media-wiki LocalSettings.php
+  ansible.builtin.template:
+    src: LocalSettings_php.j2
+    dest: /var/www/html/my-wiki/LocalSettings.php
+    owner: www-data
+    group: www-data
+    mode: '0640'
+  tags:
+    - promote_replica
+    - restore_media
+
+- name: Меняем конфиг pg_hba.conf
+  copy:
+    src: pg_hba.conf
+    dest: "/etc/postgresql/14/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+
+- name: Меняем конфиг postgresql /etc/postgresql/14/main/postgresql.conf
+  copy:
+    src: postgresql.conf
+    dest: /etc/postgresql/14/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: '0644'
+
+- name: Удаляем locale bd
+  ansible.builtin.shell:
+    sudo -u postgres -i rm -rf /var/lib/postgresql/14/main/
+  become: false
+  tags:
+    - promote_replica
+    - restore_bd
+
+- name: Делаем basebackup
+  ansible.builtin.shell:
+    sudo -u postgres -i pg_basebackup -h {{ hostvars['bd-main']['ansible_host'] }} -D /var/lib/postgresql/14/main -U syncuser -w -P -v -R
+  become: false
+  changed_when: true
+  notify:
+    - "Nginx Reloader"
+    - "Psql Reloader"
+  tags:
+    - promote_replica
+    - restore_bd

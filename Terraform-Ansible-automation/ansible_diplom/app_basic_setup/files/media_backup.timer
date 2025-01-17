@@ -1,0 +1,9 @@
+[Unit]
+Description=Media Backup timer every  day
+
+[Timer]
+OnCalendar=00:00:00
+Unit=media_backup.service
+
+[Install]
+WantedBy=timers.target

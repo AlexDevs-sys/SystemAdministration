@@ -1,0 +1,239 @@
+---
+# tasks file for backup_server_setup
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  tags:
+    - update_backup_server
+
+- name: Upgrade all packages to the latest version
+  apt:
+    upgrade: dist
+  tags:
+    - update_backup_server
+
+- name: Устанавливаем ru_RU locale
+  community.general.locale_gen:
+    name: ru_RU.UTF-8
+    state: present
+
+- name: Обновляем locale настройки
+  ansible.builtin.shell:
+    update-locale
+  ignore_errors: yes
+
+- name: Установка mysql_server
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ packages_mysql }}"
+  notify: "Mysql Reloader"
+
+- name: Установка zabbix.deb пакетов
+  ansible.builtin.get_url:
+    url:
+      "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu22.04_all.deb"
+    dest: "/tmp"
+  become: yes
+  become_user: root
+
+- name: dpkg
+  apt:
+    deb: '/tmp/zabbix-release_latest_7.0+ubuntu22.04_all.deb'
+    state: present
+  become: yes
+  become_user: root
+
+- name: apt update
+  apt:
+    update_cache: yes
+
+- name: Upgrade all packages to the latest version
+  apt:
+    upgrade: dist
+
+- name: Установка zabbix пакетов
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ packages_zabbix_server }}"
+
+- name: Создаем базу данных
+  ansible.builtin.shell:
+    mysql -uroot -e 'create database zabbix character set utf8mb4 collate utf8mb4_bin;'
+  ignore_errors: yes
+
+- name: sql create user
+  ansible.builtin.shell:
+    mysql -uroot -e "create user zabbix@localhost identified by 'your_password123';"
+  ignore_errors: yes
+
+- name: sql privilages
+  ansible.builtin.shell:
+    mysql -uroot -e 'grant all privileges on zabbix.* to zabbix@localhost;'
+  ignore_errors: yes
+
+- name: sql_query log_bin
+  ansible.builtin.shell:
+    mysql -uroot -e 'set global log_bin_trust_function_creators = 1;'
+  ignore_errors: yes
+
+- name: Извлекаем бд zabbix и передаем ее в mysql
+  ansible.builtin.shell:
+    "sudo zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | mysql --default-character-set=utf8mb4 -uzabbix -p'your_password123' zabbix > /dev/null 2>&1"
+  ignore_errors: yes
+
+- name: Config mysql
+  ansible.builtin.shell:
+    mysql -uroot -e 'set global log_bin_trust_function_creators = 0;'
+  ignore_errors: yes
+
+- name: Меняем zabbix nginx conf
+  ansible.builtin.template:
+    src: zabbix_nginx_conf.j2
+    dest: "/etc/zabbix/nginx.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  changed_when: true
+  notify:
+    - "Php-fpm Reloader"
+    - "Nginx Reloader"
+
+- name: Меняем server config zabbix
+  copy:
+    src:  zabbix_server.conf
+    dest: /etc/zabbix/zabbix_server.conf
+    mode: '0600'
+    owner: root
+    group: root
+  changed_when: true
+  notify:
+    - "Zabbix server Reloader"
+    - "Zabbix agent Reloader"
+
+- name: Устанавливаем NFS пакеты
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ packages_nfs }}"
+
+- name: Создаем директорию на экспорт
+  ansible.builtin.file:
+    path: /srv/shares/nfs/backups
+    state: directory
+    owner: "mysql"
+    group: "sudo"
+    mode: '0775'
+  tags:
+    - update_backup_server
+    - restore_bd
+    - restore_media
+
+- name: Создаем директорию на экспорт для ежедневных бэкапов
+  ansible.builtin.file:
+    path: /srv/shares/nfs/backups/eachday.bak.d/
+    state: directory
+    owner: "mysql"
+    group: "sudo"
+    mode: '0775'
+  tags:
+    - update_backup_server
+    - restore_bd
+    - restore_media
+
+- name: Создаем директорию на экспорт для свежих бэкапов
+  ansible.builtin.file:
+    path: /srv/shares/nfs/backups/fresh.bak.d/
+    state: directory
+    owner: "mysql"
+    group: "sudo"
+    mode: '0775'
+  tags:
+    - update_backup_server
+    - restore_bd
+    - restore_media
+
+- name: Удаляем старые правила
+  ansible.builtin.shell:
+    cat /dev/null > /etc/exports
+  changed_when: true
+  notify:
+    - "NFS Export"
+    - "NFS Reloader"
+  tags:
+    - promote_replica
+    - update_backup_server
+
+- name: Разрешаем экспорт директории на наш main bd сервер
+  ansible.builtin.lineinfile:
+    path: /etc/exports
+    line: "/srv/shares/nfs/backups {{ hostvars['bd-main']['ansible_host'] }}(rw,sync,no_subtree_check)"
+    create: yes
+  changed_when: true
+  notify:
+    - "NFS Export"
+    - "NFS Reloader"
+  tags:
+    - promote_replica
+    - update_backup_server
+
+- name: Разрешаем экспорт директории на наш repl1 bd сервер (только на чтение)
+  ansible.builtin.lineinfile:
+    path: /etc/exports
+    line: "/srv/shares/nfs/backups {{ hostvars['bd-replica1']['ansible_host'] }}(ro,sync,no_subtree_check)"
+    create: yes
+  changed_when: true
+  notify:
+    - "NFS Export"
+    - "NFS Reloader"
+  when: hostvars['bd-replica1']['ansible_host'] is defined and hostvars['bd-replica1']['ansible_host']
+  tags:
+    - promote_replica
+    - update_backup_server
+
+- name: Разрешаем экспорт директории на наш repl2 bd сервер (только на чтение)
+  ansible.builtin.lineinfile:
+    path: /etc/exports
+    line: "/srv/shares/nfs/backups {{ hostvars['bd-replica2']['ansible_host'] }}(ro,sync,no_subtree_check)"
+    create: yes
+  changed_when: true
+  notify:
+    - "NFS Export"
+    - "NFS Reloader"
+  when: hostvars['bd-replica2']['ansible_host'] is defined and hostvars['bd-replica2']['ansible_host']
+  tags:
+    - promote_replica
+    - update_backup_server
+
+- name: Устанавливаем crone демона для удаления файлов в /srv/
+  ansible.builtin.cron:
+    name: "Delete old files (older 30 days) in /backups/eachday.bak.d/"
+    minute: 0
+    hour: 0
+    day: 1
+    month: "*"
+    weekday: "*"
+    job: find /srv/shares/nfs/backups/eachday.bak.d -type f -mtime +30 -exec rm -f '{}' \; && find /srv/shares/nfs/backups/eachday.bak.d -type d -empty -exec rmdir '{}' \;
+    state: present
+
+- name: Копируем свежие backup файлы (all.sql) в директорию /srv/shares/nfs/backups/fresh.bak.d/
+  copy:
+    src: all.sql
+    dest: /srv/shares/nfs/backups/fresh.bak.d/
+    owner: mysql
+    group: sudo
+    mode: '0660'
+
+- name: Копируем свежие backup файлы (my-wiki.tar.gz) в директорию /srv/shares/nfs/backups/fresh.bak.d
+  copy:
+    src: my-wiki.tar.gz
+    dest: /srv/shares/nfs/backups/fresh.bak.d/
+    owner: mysql
+    group: sudo
+    mode: '0660'
+
+

@@ -1,0 +1,26 @@
+---
+linux:
+  children:
+    nginx_proxy:
+      hosts:
+        nginx:
+          ansible_host: 84.201.140.114 #Машина 1 nginx_proxy server
+    pgsql_main:
+      hosts:
+        bd-main:
+          ansible_host: 51.250.103.108 #Машина 2 pgsql_main server
+    pgsql_replicas:
+      hosts:
+        bd-replica1:
+          ansible_host: 51.250.20.201  #Машина 3 pgsql_replica server
+        bd-replica2:
+          ansible_host: 84.201.155.201 #Машина 4 pgsql_replica server 2
+    backup_server:
+      hosts:
+        backup_vm:
+          ansible_host: 51.250.111.144 #Машина 5 backup_server
+  vars:
+    ansible_ssh_user: "s17619864"
+    ansible_ssh_private_key_file: ~/.ssh/VmsKeys/yandex_diplom
+    connection_protocol: ssh
+    ansible_become: true

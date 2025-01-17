@@ -1,0 +1,24 @@
+---
+# vars file for app_basic_setup
+media_wiki_packages:
+  - php
+  - php-intl
+  - php-mbstring
+  - php-xml
+  - php-apcu
+  - php-curl
+  - php-fpm
+  - php-pgsql
+  - php-gd
+  - php-zip
+  - php-bz2
+  - php-json
+  - nginx
+  - postgresql
+
+zabbix_packages:
+  - zabbix-agent
+
+nfs_packages:
+  - nfs-common
+

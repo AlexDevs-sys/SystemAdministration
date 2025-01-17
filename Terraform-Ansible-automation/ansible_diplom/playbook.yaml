@@ -1,0 +1,81 @@
+---
+- name: Configure SSH client alive settings
+  hosts:
+    - backup_server
+    - pgsql_replicas
+    - pgsql_main
+  tasks:
+    - name: Ensure ClientAliveInterval is set to 60
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^ClientAliveInterval'
+        line: 'ClientAliveInterval 60'
+        state: present
+        backup: yes  # Create a backup of the file before editing
+
+    - name: Ensure ClientAliveCountMax is set to 3
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^ClientAliveCountMax'
+        line: 'ClientAliveCountMax 3'
+        state: present
+        backup: yes  # Create a backup of the file before editing
+
+    - name: Restart SSH service to apply changes
+      service:
+        name: sshd
+        state: restarted
+  tags:
+    - ssh_alive_connection_edit
+
+- name: Настройка backup сервера
+  hosts: backup_server
+  roles:
+    - role: backup_server_setup
+  tags:
+    - backup_server_setup #Запуск backup-сервера, выполнение до Установки ПО и ввода
+# в эксплуатацию
+
+- name: Установка и настройка nginx на проксирующий сервер
+  hosts: nginx_proxy
+  roles:
+    - role: nginx_proxy_setup
+  tags:
+    - nginx_proxy_setup #Любым по счету
+
+- name: Переключение на реплику, в случае отказа основного сервера
+  hosts:
+     - pgsql_main
+  roles:
+    - role: promote_replica
+  tags:
+    - promote_replica
+  #(!предварительно измените адрес main сервера на адрес одной из реплик, старый main адрес можно будет добавить в список реплик если он готов к работе)
+
+- name: Установка ПО на отдающие сервера pg main и pg replicas
+  hosts:
+    - pgsql_main
+    - pgsql_replicas
+  roles:
+    - role: app_basic_setup
+  tags:
+    - app_basic_setup
+
+- name: Ввод в эксплуатацию pgsql_main сервера
+  hosts: pgsql_main
+  roles:
+    - role: pgsql_main_launch
+  tags:
+    - pgsql_main_launch #Использовать перед pgsql_replicas_launch, если первичный
+#запуск
+
+- name: Ввод в эксплуатацию pgsql_replicas серверов
+  hosts: pgsql_replicas
+  roles:
+    - role: pgsql_replicas_launch
+  tags:
+    - pgsql_replicas_launch #Данную роль можно использовать для синхронизации реплик, 
+#а также
+# для первичного запуска реплик (в данном случае после pgsql_main_launch)
+
+

@@ -1,0 +1,14 @@
+[Unit]
+Description=Whole Backup of postgresql db (runs hourly)
+After=network.target
+Requires=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pgsql_backup.sh /mnt/nfs/backups 
+User=postgres
+Group=sudo
+WorkingDirectory=/mnt/nfs/backups
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+---
+# tasks file for promote_replica
+- name: Stop nginx before editing
+  service:
+    name: nginx
+    state: stopped
+
+- name: Переключение в режим основного (удаление standby и изменение конфигов)
+  shell:
+    pg_ctlcluster 14 main promote
+  ignore_errors: yes
+
+- name: Меняем конфиг pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba_conf.j2
+    dest: "/etc/postgresql/14/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  changed_when: true
+  notify:
+    - "Psql Reloader"
+
+- name: Меняем Local Settingis in my-wiki
+  ansible.builtin.template:
+    src: LocalSettings_php.j2
+    dest: /var/www/html/my-wiki/LocalSettings.php
+    owner: www-data
+    group: www-data
+    mode: '0640'
+  changed_when: true
+  notify:
+    - "Nginx Reloader"
+    - "Media Backup Reloader"
+    - "Psql Backup Reloader"
+
