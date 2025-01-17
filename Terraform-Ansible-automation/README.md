@@ -16,7 +16,7 @@ __Commands for basic initialization (execute in directory with playbook)__
 1. First create roles with _ansible-galaxy_ command. 
 There are should be 5 main roles: backup\_server\_setup, nginx\_proxy\_setup, app_basic setup, 
 pgsql\_main\_launch and pgsql\_replicas\_launch.
-And you can also consider using promote\_replica for replica promotion in case of main bd servers fails.
+And you can also consider using promote\_replica for replica promotion in case of main bd server fails.
 
 
 2. Just execute this command 5 times
